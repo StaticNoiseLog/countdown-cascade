@@ -8,13 +8,13 @@ let timers = JSON.parse(localStorage.getItem('timers') || '[]');
 
 function createTimer(name, hours, minutes, seconds, sound) {
   return {
-      id: crypto.randomUUID(),
-      name,
-      totalSeconds: hours * 3600 + minutes * 60 + seconds,
-      remainingSeconds: hours * 3600 + minutes * 60 + seconds,
-      sound,
-      isRunning: false,
-      nextTimerId: null
+    id: crypto.randomUUID(),
+    name,
+    totalSeconds: hours * 3600 + minutes * 60 + seconds,
+    remainingSeconds: hours * 3600 + minutes * 60 + seconds,
+    sound,
+    isRunning: false,
+    nextTimerId: null
   };
 }
 
@@ -51,67 +51,67 @@ function createTimerElement(timer) {
   audio.preload = 'auto';
 
   const updateDisplay = () => {
-      if (timer.isRunning && timer.remainingSeconds > 0) {
-          timer.remainingSeconds--;
-          updateProgressIndicator(timerElement, timer);
-          
-          if (timer.remainingSeconds === 0) {
-              timerElement.style.setProperty('--progress-width', '100%');
-              timer.isRunning = false;
-              audio.play().catch(console.warn);
-              saveTimers();
-              
-              // Start next timer in chain if it exists
-              if (timer.nextTimerId) {
-                  const nextTimer = findTimerById(timer.nextTimerId);
-                  if (nextTimer) {
-                      const nextTimerElement = document.querySelector(`[data-timer-id="${nextTimer.id}"]`);
-                      if (nextTimerElement) {
-                          const startButton = nextTimerElement.querySelector('.btn-start');
-                          startButton.click();
-                      }
-                  }
-              }
+    if (timer.isRunning && timer.remainingSeconds > 0) {
+      timer.remainingSeconds--;
+      updateProgressIndicator(timerElement, timer);
+
+      if (timer.remainingSeconds === 0) {
+        timerElement.style.setProperty('--progress-width', '100%');
+        timer.isRunning = false;
+        audio.play().catch(console.warn);
+        saveTimers();
+
+        // Start next timer in chain if it exists
+        if (timer.nextTimerId) {
+          const nextTimer = findTimerById(timer.nextTimerId);
+          if (nextTimer) {
+            const nextTimerElement = document.querySelector(`[data-timer-id="${nextTimer.id}"]`);
+            if (nextTimerElement) {
+              const startButton = nextTimerElement.querySelector('.btn-start');
+              startButton.click();
+            }
           }
+        }
       }
-      displayElement.textContent = formatTime(timer.remainingSeconds);
-      displayElement.classList.toggle('active', timer.isRunning);
+    }
+    displayElement.textContent = formatTime(timer.remainingSeconds);
+    displayElement.classList.toggle('active', timer.isRunning);
   };
 
   let intervalId = null;
 
   const startTimer = () => {
-      timer.isRunning = true;
-      intervalId = setInterval(updateDisplay, 1000);
-      startButton.style.display = 'none';
-      pauseButton.style.display = 'block';
-      displayElement.classList.add('active');
-      timerElement.classList.add('running');
-      updateProgressIndicator(timerElement, timer);
-      saveTimers();
+    timer.isRunning = true;
+    intervalId = setInterval(updateDisplay, 1000);
+    startButton.style.display = 'none';
+    pauseButton.style.display = 'block';
+    displayElement.classList.add('active');
+    timerElement.classList.add('running');
+    updateProgressIndicator(timerElement, timer);
+    saveTimers();
   };
 
   const pauseTimer = () => {
-      timer.isRunning = false;
-      clearInterval(intervalId);
-      startButton.style.display = 'block';
-      pauseButton.style.display = 'none';
-      displayElement.classList.remove('active');
-      timerElement.classList.remove('running');
-      saveTimers();
+    timer.isRunning = false;
+    clearInterval(intervalId);
+    startButton.style.display = 'block';
+    pauseButton.style.display = 'none';
+    displayElement.classList.remove('active');
+    timerElement.classList.remove('running');
+    saveTimers();
   };
 
   const resetTimer = () => {
-      timer.isRunning = false;
-      timer.remainingSeconds = timer.totalSeconds;
-      clearInterval(intervalId);
-      startButton.style.display = 'block';
-      pauseButton.style.display = 'none';
-      displayElement.classList.remove('active');
-      timerElement.classList.remove('running');
-      timerElement.style.setProperty('--progress-width', '0%');
-      displayElement.textContent = formatTime(timer.remainingSeconds);
-      saveTimers();
+    timer.isRunning = false;
+    timer.remainingSeconds = timer.totalSeconds;
+    clearInterval(intervalId);
+    startButton.style.display = 'block';
+    pauseButton.style.display = 'none';
+    displayElement.classList.remove('active');
+    timerElement.classList.remove('running');
+    timerElement.style.setProperty('--progress-width', '0%');
+    displayElement.textContent = formatTime(timer.remainingSeconds);
+    saveTimers();
   };
 
   const nameElement = document.createElement('div');
@@ -122,15 +122,15 @@ function createTimerElement(timer) {
   displayElement.className = 'timer-display';
   displayElement.textContent = formatTime(timer.remainingSeconds);
   if (timer.isRunning) {
-      displayElement.classList.add('active');
+    displayElement.classList.add('active');
   }
 
   // Add chain indicator
   const chainIndicator = document.createElement('div');
   chainIndicator.className = 'chain-indicator';
   if (timer.nextTimerId) {
-      const nextTimer = findTimerById(timer.nextTimerId);
-      chainIndicator.textContent = `→ ${nextTimer ? nextTimer.name : 'Unknown'}`;
+    const nextTimer = findTimerById(timer.nextTimerId);
+    chainIndicator.textContent = `→ ${nextTimer ? nextTimer.name : 'Unknown'}`;
   }
 
   const startButton = document.createElement('button');
@@ -154,65 +154,65 @@ function createTimerElement(timer) {
   chainButton.textContent = '🔗';
   chainButton.title = 'Chain to next timer';
   chainButton.onclick = () => {
-      const otherTimers = timers.filter(t => t.id !== timer.id);
-      if (otherTimers.length === 0) {
-          alert('No other timers available to chain to!');
-          return;
+    const otherTimers = timers.filter(t => t.id !== timer.id);
+    if (otherTimers.length === 0) {
+      alert('No other timers available to chain to!');
+      return;
+    }
+
+    const select = document.createElement('select');
+    select.className = 'chain-select';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'None';
+    select.appendChild(defaultOption);
+
+    otherTimers.forEach(t => {
+      const option = document.createElement('option');
+      option.value = t.id;
+      option.textContent = t.name;
+      if (t.id === timer.nextTimerId) {
+        option.selected = true;
       }
+      select.appendChild(option);
+    });
 
-      const select = document.createElement('select');
-      select.className = 'chain-select';
-      
-      const defaultOption = document.createElement('option');
-      defaultOption.value = '';
-      defaultOption.textContent = 'None';
-      select.appendChild(defaultOption);
+    select.onchange = (e) => {
+      const selectedId = e.target.value;
+      timer.nextTimerId = selectedId || null;
+      chainIndicator.textContent = selectedId ? `→ ${findTimerById(selectedId).name}` : '';
+      saveTimers();
+      select.replaceWith(chainButton);
+    };
 
-      otherTimers.forEach(t => {
-          const option = document.createElement('option');
-          option.value = t.id;
-          option.textContent = t.name;
-          if (t.id === timer.nextTimerId) {
-              option.selected = true;
-          }
-          select.appendChild(option);
-      });
-
-      select.onchange = (e) => {
-          const selectedId = e.target.value;
-          timer.nextTimerId = selectedId || null;
-          chainIndicator.textContent = selectedId ? `→ ${findTimerById(selectedId).name}` : '';
-          saveTimers();
-          select.replaceWith(chainButton);
-      };
-
-      chainButton.replaceWith(select);
-      select.focus();
+    chainButton.replaceWith(select);
+    select.focus();
   };
 
   const deleteButton = document.createElement('button');
   deleteButton.className = 'btn-delete';
   deleteButton.textContent = '×';
   deleteButton.onclick = () => {
-      clearInterval(intervalId);
-      // Remove references to this timer from other timers
-      timers.forEach(t => {
-          if (t.nextTimerId === timer.id) {
-              t.nextTimerId = null;
-              // Find and update the chain indicator for timers that referenced this timer
-              const timerElement = document.querySelector(`[data-timer-id="${t.id}"]`);
-              if (timerElement) {
-                  const chainIndicator = timerElement.querySelector('.chain-indicator');
-                  if (chainIndicator) {
-                      chainIndicator.textContent = '';
-                  }
-              }
+    clearInterval(intervalId);
+    // Remove references to this timer from other timers
+    timers.forEach(t => {
+      if (t.nextTimerId === timer.id) {
+        t.nextTimerId = null;
+        // Find and update the chain indicator for timers that referenced this timer
+        const timerElement = document.querySelector(`[data-timer-id="${t.id}"]`);
+        if (timerElement) {
+          const chainIndicator = timerElement.querySelector('.chain-indicator');
+          if (chainIndicator) {
+            chainIndicator.textContent = '';
           }
-      });
-      timers = timers.filter(t => t.id !== timer.id);
-      timerElement.remove();
-      saveTimers();
-      updateEmptyState();
+        }
+      }
+    });
+    timers = timers.filter(t => t.id !== timer.id);
+    timerElement.remove();
+    saveTimers();
+    updateEmptyState();
   };
 
   const controlsDiv = document.createElement('div');
@@ -233,7 +233,7 @@ function createTimerElement(timer) {
   timerElement.appendChild(displayElement);
 
   if (timer.isRunning) {
-      startTimer();
+    startTimer();
   }
 
   return timerElement;
@@ -242,15 +242,15 @@ function createTimerElement(timer) {
 function updateEmptyState() {
   const timerList = document.getElementById('timerList');
   if (timers.length === 0) {
-      const emptyState = document.createElement('div');
-      emptyState.className = 'empty-state';
-      emptyState.textContent = 'No timers yet. Create one to get started!';
-      timerList.appendChild(emptyState);
+    const emptyState = document.createElement('div');
+    emptyState.className = 'empty-state';
+    emptyState.textContent = 'No timers yet. Create one to get started!';
+    timerList.appendChild(emptyState);
   } else {
-      const emptyState = timerList.querySelector('.empty-state');
-      if (emptyState) {
-          emptyState.remove();
-      }
+    const emptyState = timerList.querySelector('.empty-state');
+    if (emptyState) {
+      emptyState.remove();
+    }
   }
 }
 
@@ -270,19 +270,19 @@ document.getElementById('timerList').addEventListener('dragover', (e) => {
   e.preventDefault();
   const timerItem = e.target.closest('.timer-item');
   if (timerItem && timerItem !== draggedTimer) {
-      const rect = timerItem.getBoundingClientRect();
-      const midpoint = rect.top + rect.height / 2;
-      if (e.clientY < midpoint) {
-          timerItem.parentNode.insertBefore(draggedTimer, timerItem);
-      } else {
-          timerItem.parentNode.insertBefore(draggedTimer, timerItem.nextSibling);
-      }
-      // Update timers array to match new DOM order
-      const timerElements = document.querySelectorAll('.timer-item');
-      timers = Array.from(timerElements).map(el => 
-          timers.find(t => t.id === el.dataset.timerId)
-      );
-      saveTimers();
+    const rect = timerItem.getBoundingClientRect();
+    const midpoint = rect.top + rect.height / 2;
+    if (e.clientY < midpoint) {
+      timerItem.parentNode.insertBefore(draggedTimer, timerItem);
+    } else {
+      timerItem.parentNode.insertBefore(draggedTimer, timerItem.nextSibling);
+    }
+    // Update timers array to match new DOM order
+    const timerElements = document.querySelectorAll('.timer-item');
+    timers = Array.from(timerElements).map(el =>
+      timers.find(t => t.id === el.dataset.timerId)
+    );
+    saveTimers();
   }
 });
 
