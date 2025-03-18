@@ -33,6 +33,17 @@ function findTimerById(id) {
   return timers.find(t => t.id === id);
 }
 
+function resetTimerAndDownstream(startTimer) {
+  let current = startTimer;
+  while (current) {
+    if (current.reset) {
+      current.reset();
+    }
+    const nextId = current.nextTimerId;
+    current = nextId ? findTimerById(nextId) : null;
+  }
+}
+
 function updateProgressIndicator(timerElement, timer) {
   // Calculate progress percentage based on elapsed time
   const elapsedSeconds = timer.totalSeconds - timer.remainingSeconds;
@@ -112,6 +123,7 @@ function createTimerElement(timer) {
     displayElement.textContent = formatTime(timer.remainingSeconds);
     saveTimers();
   };
+  timer.reset = resetTimer; // Attach reset function to timer object
 
   const nameElement = document.createElement('div');
   nameElement.className = 'timer-name';
@@ -146,7 +158,7 @@ function createTimerElement(timer) {
   const resetButton = document.createElement('button');
   resetButton.className = 'btn-reset';
   resetButton.textContent = '↺';
-  resetButton.onclick = resetTimer;
+  resetButton.onclick = () => resetTimerAndDownstream(timer); // Reset this timer and downstream timers
 
   const chainButton = document.createElement('button');
   chainButton.className = 'btn-chain';
