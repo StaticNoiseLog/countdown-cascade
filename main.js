@@ -37,7 +37,6 @@ function updateProgressIndicator(timerElement, timer) {
   // Calculate progress percentage based on elapsed time
   const elapsedSeconds = timer.totalSeconds - timer.remainingSeconds;
   const progressPercentage = ((elapsedSeconds + 1) / timer.totalSeconds) * 100;
-  console.log('--progress-width: ${progressPercentage}%')
   timerElement.style.setProperty('--progress-width', `${progressPercentage}%`);
 }
 
