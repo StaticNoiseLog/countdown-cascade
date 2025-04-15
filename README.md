@@ -8,6 +8,8 @@ You can avoid it by using a minimal web server:
 cd /c/BK/IT/DEV/WEB/countdown-cascade
 python -m http.server
 
+The app can be found here: http://localhost:8000/
+
 
 Software Architecture
 =====================
