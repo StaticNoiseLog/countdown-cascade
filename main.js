@@ -56,7 +56,6 @@ function createTimerElement(timer) {
   timerElement.className = 'timer-item';
   timerElement.draggable = true;
   timerElement.dataset.timerId = timer.id;
-
   const audio = new Audio(SOUND_URLS[timer.sound]);
   audio.preload = 'auto';
 
@@ -74,12 +73,10 @@ function createTimerElement(timer) {
         // Start next timer in chain if it exists
         if (timer.nextTimerId) {
           const nextTimer = findTimerById(timer.nextTimerId);
-          if (nextTimer) {
-            const nextTimerElement = document.querySelector(`[data-timer-id="${nextTimer.id}"]`);
-            if (nextTimerElement) {
-              const startButton = nextTimerElement.querySelector('.btn-start');
-              startButton.click();
-            }
+          // Find the actual timer *object* which now has the start method
+          if (nextTimer && nextTimer.start) {
+            console.log(`Chaining: Starting timer ${nextTimer.name}`);
+            nextTimer.start(); // Call the start function directly
           }
         }
       }
@@ -123,6 +120,8 @@ function createTimerElement(timer) {
     displayElement.textContent = formatTime(timer.remainingSeconds);
     saveTimers();
   };
+  timer.start = startTimer; // Attach start function to timer object
+  timer.pause = pauseTimer; // Attach pause function to timer object
   timer.reset = resetTimer; // Attach reset function to timer object
 
   const nameElement = document.createElement('div');
@@ -291,7 +290,7 @@ document.getElementById('timerList').addEventListener('dragover', (e) => {
     // Update timers array to match new DOM order
     const timerElements = document.querySelectorAll('.timer-item');
     timers = Array.from(timerElements).map(el =>
-      timers.find(t => t.id === el.dataset.timerId)
+    timers.find(t => t.id === el.dataset.timerId)
     );
     saveTimers();
   }

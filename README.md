@@ -5,7 +5,7 @@ Browsers consider each "file:" source as a different origin, even when it is in 
 
 You can avoid it by using a minimal web server:
 
-cd /c/BK/IT/DEV/WEB/timer-app
+cd /c/BK/IT/DEV/WEB/countdown-cascade
 python -m http.server
 
 
