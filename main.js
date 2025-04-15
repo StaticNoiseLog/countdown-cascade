@@ -73,10 +73,10 @@ function createTimerElement(timer) {
         // Start next timer in chain if it exists
         if (timer.nextTimerId) {
           const nextTimer = findTimerById(timer.nextTimerId);
-          // Find the actual timer *object* which now has the start method
+          // Find the actual timer object (which has the start method set)
           if (nextTimer && nextTimer.start) {
             console.log(`Chaining: Starting timer ${nextTimer.name}`);
-            nextTimer.start(); // Call the start function directly
+            nextTimer.start(); // Call the start function directly (don't use programmatic button click)
           }
         }
       }
