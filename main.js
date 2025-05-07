@@ -107,17 +107,18 @@ function createTimerElement(timer) {
         timerElement.style.setProperty('--progress-width', '100%');
         timer.isRunning = false;
         
-        // Play sound and wait for it to complete before starting next timer
-        playSound(timer.sound).then(() => {
-          // Start next timer in chain if it exists
-          if (timer.nextTimerId) {
-            const nextTimer = findTimerById(timer.nextTimerId);
-            if (nextTimer && nextTimer.start) {
-              console.log(`Chaining: Starting timer ${nextTimer.name}`);
-              nextTimer.start();
-            }
+        // Play sound in background without waiting
+        playSound(timer.sound);
+        
+        // Immediately start next timer if it exists
+        if (timer.nextTimerId) {
+          const nextTimer = findTimerById(timer.nextTimerId);
+          if (nextTimer && nextTimer.start) {
+            console.log(`Chaining: Starting timer ${nextTimer.name}`);
+            // Small timeout to ensure UI updates before starting next timer
+            setTimeout(() => nextTimer.start(), 50);
           }
-        });
+        }
         
         saveTimers();
       }
