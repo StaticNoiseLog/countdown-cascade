@@ -4,6 +4,23 @@ const SOUND_URLS = {
   chime: 'resources/DingiDong.ogg' // Using ding sound as fallback for chime
 };
 
+const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+const audioBuffers = {};
+
+// Preload all sounds
+async function preloadSounds() {
+  for (const [key, url] of Object.entries(SOUND_URLS)) {
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      audioBuffers[key] = await audioContext.decodeAudioData(arrayBuffer);
+    } catch (error) {
+      console.error(`Failed to load sound: ${url}`, error);
+    }
+  }
+}
+preloadSounds();
+
 let timers = JSON.parse(localStorage.getItem('timers') || '[]');
 
 function createTimer(name, hours, minutes, seconds, sound) {
@@ -51,6 +68,28 @@ function updateProgressIndicator(timerElement, timer) {
   timerElement.style.setProperty('--progress-width', `${progressPercentage}%`);
 }
 
+function playSound(sound) {
+  return new Promise((resolve) => {
+    if (!audioBuffers[sound]) {
+      console.warn(`Sound not loaded: ${sound}`);
+      resolve();
+      return;
+    }
+    
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffers[sound];
+    source.connect(audioContext.destination);
+    source.onended = resolve;
+    
+    // Resume context if suspended (browser policy)
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().then(() => source.start(0));
+    } else {
+      source.start(0);
+    }
+  });
+}
+
 function createTimerElement(timer) {
   const timerElement = document.createElement('div');
   timerElement.className = 'timer-item';
@@ -67,18 +106,21 @@ function createTimerElement(timer) {
       if (timer.remainingSeconds === 0) {
         timerElement.style.setProperty('--progress-width', '100%');
         timer.isRunning = false;
-        audio.play().catch(console.warn);
-        saveTimers();
-
-        // Start next timer in chain if it exists
+        
+        // Play sound in background without waiting
+        playSound(timer.sound);
+        
+        // Immediately start next timer if it exists
         if (timer.nextTimerId) {
           const nextTimer = findTimerById(timer.nextTimerId);
-          // Find the actual timer object (which has the start method set)
           if (nextTimer && nextTimer.start) {
             console.log(`Chaining: Starting timer ${nextTimer.name}`);
-            nextTimer.start(); // Call the start function directly (don't use programmatic button click)
+            // Small timeout to ensure UI updates before starting next timer
+            setTimeout(() => nextTimer.start(), 50);
           }
         }
+        
+        saveTimers();
       }
     }
     displayElement.textContent = formatTime(timer.remainingSeconds);
