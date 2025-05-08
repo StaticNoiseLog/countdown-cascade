@@ -23,6 +23,107 @@ preloadSounds();
 
 let timers = JSON.parse(localStorage.getItem('timers') || '[]');
 
+let timerWorker = null;
+
+// Create a worker for timing to prevent browsers from pausing the timer when the tab is inactive
+function setupTimerWorker() {
+  // Using template literals (backticks) to define multi-line worker code as a string.
+  // This allows us to create an inline Web Worker without needing a separate file.
+  // Template literals preserve formatting and allow unescaped quotes inside the string.
+  const workerCode = `
+    let timers = {};
+    
+    self.onmessage = function(e) {
+      if (e.data.command === 'start') {
+        const { id, remainingSeconds } = e.data;
+        timers[id] = { 
+          remainingSeconds: remainingSeconds,
+          lastTick: Date.now()
+        };
+      } else if (e.data.command === 'stop') {
+        delete timers[e.data.id];
+      } else if (e.data.command === 'tick') {
+        const now = Date.now();
+        for (const id in timers) {
+          const elapsed = now - timers[id].lastTick;
+          if (elapsed >= 1000) {
+            const secondsElapsed = Math.floor(elapsed / 1000);
+            timers[id].lastTick += secondsElapsed * 1000;
+            timers[id].remainingSeconds -= secondsElapsed;
+            
+            // Check if timer completed
+            if (timers[id].remainingSeconds <= 0) {
+              timers[id].remainingSeconds = 0;
+              self.postMessage({ id, remainingSeconds: 0, completed: true });
+              delete timers[id];
+            } else {
+              self.postMessage({ id, remainingSeconds: timers[id].remainingSeconds });
+            }
+          }
+        }
+        setTimeout(() => self.postMessage({ command: 'requestTick' }), 100);
+      }
+    };
+    
+    // Start the tick loop
+    self.postMessage({ command: 'requestTick' });
+  `;
+  
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  timerWorker = new Worker(URL.createObjectURL(blob));
+  
+  timerWorker.onmessage = function(e) {
+    if (e.data.command === 'requestTick') {
+      timerWorker.postMessage({ command: 'tick' });
+    } else if (e.data.id) {
+      const timer = findTimerById(e.data.id);
+      if (timer) {
+        timer.remainingSeconds = e.data.remainingSeconds;
+        
+        // Update UI
+        const timerElement = document.querySelector(`[data-timer-id="${timer.id}"]`);
+        if (timerElement) {
+          const displayElement = timerElement.querySelector('.timer-display');
+          if (displayElement) {
+            displayElement.textContent = formatTime(timer.remainingSeconds);
+          }
+          updateProgressIndicator(timerElement, timer);
+          
+          // Handle timer completion
+          if (e.data.completed) {
+            timer.isRunning = false;
+            timerElement.style.setProperty('--progress-width', '100%');
+            timerElement.classList.remove('running');
+            
+            const startButton = timerElement.querySelector('.btn-start');
+            const pauseButton = timerElement.querySelector('.btn-pause');
+            if (startButton && pauseButton) {
+              startButton.style.display = 'block';
+              pauseButton.style.display = 'none';
+            }
+            
+            // Play sound in background without waiting
+            playSound(timer.sound);
+
+            // Start next timer in chain
+            if (timer.nextTimerId) {
+              const nextTimer = findTimerById(timer.nextTimerId);
+              if (nextTimer && nextTimer.start) {
+                console.log(`Chaining: Starting timer ${nextTimer.name}`);
+                nextTimer.start();
+              }
+            }
+          }
+        }
+        saveTimers();
+      }
+    }
+  };
+}
+
+// Initialize the worker
+setupTimerWorker();
+
 function createTimer(name, hours, minutes, seconds, sound) {
   return {
     id: crypto.randomUUID(),
@@ -75,12 +176,12 @@ function playSound(sound) {
       resolve();
       return;
     }
-    
+
     const source = audioContext.createBufferSource();
     source.buffer = audioBuffers[sound];
     source.connect(audioContext.destination);
     source.onended = resolve;
-    
+
     // Resume context if suspended (browser policy)
     if (audioContext.state === 'suspended') {
       audioContext.resume().then(() => source.start(0));
@@ -97,74 +198,6 @@ function createTimerElement(timer) {
   timerElement.dataset.timerId = timer.id;
   const audio = new Audio(SOUND_URLS[timer.sound]);
   audio.preload = 'auto';
-
-  const updateDisplay = () => {
-    if (timer.isRunning && timer.remainingSeconds > 0) {
-      timer.remainingSeconds--;
-      updateProgressIndicator(timerElement, timer);
-
-      if (timer.remainingSeconds === 0) {
-        timerElement.style.setProperty('--progress-width', '100%');
-        timer.isRunning = false;
-        
-        // Play sound in background without waiting
-        playSound(timer.sound);
-        
-        // Immediately start next timer if it exists
-        if (timer.nextTimerId) {
-          const nextTimer = findTimerById(timer.nextTimerId);
-          if (nextTimer && nextTimer.start) {
-            console.log(`Chaining: Starting timer ${nextTimer.name}`);
-            // Small timeout to ensure UI updates before starting next timer
-            setTimeout(() => nextTimer.start(), 50);
-          }
-        }
-        
-        saveTimers();
-      }
-    }
-    displayElement.textContent = formatTime(timer.remainingSeconds);
-    displayElement.classList.toggle('active', timer.isRunning);
-  };
-
-  let intervalId = null;
-
-  const startTimer = () => {
-    timer.isRunning = true;
-    intervalId = setInterval(updateDisplay, 1000);
-    startButton.style.display = 'none';
-    pauseButton.style.display = 'block';
-    displayElement.classList.add('active');
-    timerElement.classList.add('running');
-    updateProgressIndicator(timerElement, timer);
-    saveTimers();
-  };
-
-  const pauseTimer = () => {
-    timer.isRunning = false;
-    clearInterval(intervalId);
-    startButton.style.display = 'block';
-    pauseButton.style.display = 'none';
-    displayElement.classList.remove('active');
-    timerElement.classList.remove('running');
-    saveTimers();
-  };
-
-  const resetTimer = () => {
-    timer.isRunning = false;
-    timer.remainingSeconds = timer.totalSeconds;
-    clearInterval(intervalId);
-    startButton.style.display = 'block';
-    pauseButton.style.display = 'none';
-    displayElement.classList.remove('active');
-    timerElement.classList.remove('running');
-    timerElement.style.setProperty('--progress-width', '0%');
-    displayElement.textContent = formatTime(timer.remainingSeconds);
-    saveTimers();
-  };
-  timer.start = startTimer; // Attach start function to timer object
-  timer.pause = pauseTimer; // Attach pause function to timer object
-  timer.reset = resetTimer; // Attach reset function to timer object
 
   const nameElement = document.createElement('div');
   nameElement.className = 'timer-name';
@@ -184,6 +217,59 @@ function createTimerElement(timer) {
     const nextTimer = findTimerById(timer.nextTimerId);
     chainIndicator.textContent = `→ ${nextTimer ? nextTimer.name : 'Unknown'}`;
   }
+
+  const startTimer = () => {
+    timer.isRunning = true;
+    // Start the timer in the worker
+    timerWorker.postMessage({
+      command: 'start',
+      id: timer.id,
+      remainingSeconds: timer.remainingSeconds
+    });
+
+    startButton.style.display = 'none';
+    pauseButton.style.display = 'block';
+    displayElement.classList.add('active');
+    timerElement.classList.add('running');
+    updateProgressIndicator(timerElement, timer);
+    saveTimers();
+  };
+
+  const pauseTimer = () => {
+    timer.isRunning = false;
+    // Stop the timer in the worker
+    timerWorker.postMessage({
+      command: 'stop',
+      id: timer.id
+    });
+
+    startButton.style.display = 'block';
+    pauseButton.style.display = 'none';
+    displayElement.classList.remove('active');
+    timerElement.classList.remove('running');
+    saveTimers();
+  };
+
+  const resetTimer = () => {
+    timer.isRunning = false;
+    timer.remainingSeconds = timer.totalSeconds;
+    // Stop the timer in the worker
+    timerWorker.postMessage({
+      command: 'stop',
+      id: timer.id
+    });
+
+    startButton.style.display = 'block';
+    pauseButton.style.display = 'none';
+    displayElement.classList.remove('active');
+    timerElement.classList.remove('running');
+    timerElement.style.setProperty('--progress-width', '0%');
+    displayElement.textContent = formatTime(timer.remainingSeconds);
+    saveTimers();
+  };
+  timer.start = startTimer; // Attach start function to timer object
+  timer.pause = pauseTimer; // Attach pause function to timer object
+  timer.reset = resetTimer; // Attach reset function to timer object
 
   const startButton = document.createElement('button');
   startButton.className = 'btn-start';
@@ -246,7 +332,14 @@ function createTimerElement(timer) {
   deleteButton.className = 'btn-delete';
   deleteButton.textContent = '×';
   deleteButton.onclick = () => {
-    clearInterval(intervalId);
+    // Stop the timer in the worker if it's running
+    if (timer.isRunning) {
+      timerWorker.postMessage({
+        command: 'stop',
+        id: timer.id
+      });
+    }
+
     // Remove references to this timer from other timers
     timers.forEach(t => {
       if (t.nextTimerId === timer.id) {
