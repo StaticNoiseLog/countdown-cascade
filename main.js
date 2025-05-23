@@ -32,6 +32,41 @@ function setupTimerWorker() {
   // Template literals preserve formatting and allow unescaped quotes inside the string.
   const workerCode = `
     let timers = {};
+    let tickInterval = null;
+    let isThrottled = false;
+    
+    // Function to start the tick loop with appropriate interval
+    function startTickLoop() {
+      if (tickInterval) {
+        clearInterval(tickInterval);
+      }
+      
+      // Use shorter interval when page is visible, longer when hidden
+      const interval = isThrottled ? 1000 : 100;
+      tickInterval = setInterval(processTick, interval);
+    }
+    
+    // Process a single tick for all timers
+    function processTick() {
+      const now = Date.now();
+      for (const id in timers) {
+        const elapsed = now - timers[id].lastTick;
+        if (elapsed >= 1000) {
+          const secondsElapsed = Math.floor(elapsed / 1000);
+          timers[id].lastTick += secondsElapsed * 1000;
+          timers[id].remainingSeconds -= secondsElapsed;
+          
+          // Check if timer completed
+          if (timers[id].remainingSeconds <= 0) {
+            timers[id].remainingSeconds = 0;
+            self.postMessage({ id, remainingSeconds: 0, completed: true });
+            delete timers[id];
+          } else {
+            self.postMessage({ id, remainingSeconds: timers[id].remainingSeconds });
+          }
+        }
+      }
+    }
     
     self.onmessage = function(e) {
       if (e.data.command === 'start') {
@@ -40,46 +75,128 @@ function setupTimerWorker() {
           remainingSeconds: remainingSeconds,
           lastTick: Date.now()
         };
+        
+        // Make sure tick loop is running when we have timers
+        if (!tickInterval) {
+          startTickLoop();
+        }
       } else if (e.data.command === 'stop') {
         delete timers[e.data.id];
-      } else if (e.data.command === 'tick') {
-        const now = Date.now();
-        for (const id in timers) {
-          const elapsed = now - timers[id].lastTick;
-          if (elapsed >= 1000) {
-            const secondsElapsed = Math.floor(elapsed / 1000);
-            timers[id].lastTick += secondsElapsed * 1000;
-            timers[id].remainingSeconds -= secondsElapsed;
-            
-            // Check if timer completed
-            if (timers[id].remainingSeconds <= 0) {
-              timers[id].remainingSeconds = 0;
-              self.postMessage({ id, remainingSeconds: 0, completed: true });
-              delete timers[id];
-            } else {
-              self.postMessage({ id, remainingSeconds: timers[id].remainingSeconds });
-            }
-          }
+        
+        // If no more timers, stop the loop to save resources
+        if (Object.keys(timers).length === 0 && tickInterval) {
+          clearInterval(tickInterval);
+          tickInterval = null;
         }
-        setTimeout(() => self.postMessage({ command: 'requestTick' }), 100);
+      } else if (e.data.command === 'visibility') {
+        // Update throttling state based on page visibility
+        isThrottled = e.data.isHidden;
+        
+        // Restart the loop with appropriate interval if we have active timers
+        if (Object.keys(timers).length > 0) {
+          startTickLoop();
+        }
+      } else if (e.data.command === 'ping') {
+        // Respond to ping to ensure worker is active
+        self.postMessage({ command: 'pong' });
       }
     };
     
-    // Start the tick loop
-    self.postMessage({ command: 'requestTick' });
+    // Start by sending a ready message
+    self.postMessage({ command: 'ready' });
   `;
-  
+
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   timerWorker = new Worker(URL.createObjectURL(blob));
-  
-  timerWorker.onmessage = function(e) {
-    if (e.data.command === 'requestTick') {
-      timerWorker.postMessage({ command: 'tick' });
+
+  // Keep track of worker status
+  let isWorkerActive = false;
+  let workerPingInterval = null;
+
+  // Setup page visibility handling
+  document.addEventListener('visibilitychange', () => {
+    const isHidden = document.hidden;
+
+    // Inform worker of visibility change
+    if (timerWorker && isWorkerActive) {
+      timerWorker.postMessage({
+        command: 'visibility',
+        isHidden
+      });
+    }
+
+    // When page becomes visible again, make sure worker is still running
+    if (!isHidden) {
+      verifyWorkerIsActive();
+    }
+  });
+
+  // Function to verify worker is still running and restart if needed
+  function verifyWorkerIsActive() {
+    if (!timerWorker) return;
+
+    // Create a timeout that will trigger if worker doesn't respond
+    const timeoutId = setTimeout(() => {
+      console.warn('Worker seems to be inactive, restarting...');
+      setupTimerWorker(); // Recreate worker
+
+      // Restart any active timers
+      timers.forEach(timer => {
+        if (timer.isRunning) {
+          timerWorker.postMessage({
+            command: 'start',
+            id: timer.id,
+            remainingSeconds: timer.remainingSeconds
+          });
+        }
+      });
+    }, 1000);
+
+    // Ping worker and clear timeout if it responds
+    timerWorker.postMessage({ command: 'ping' });
+
+    const pingHandler = (e) => {
+      if (e.data.command === 'pong') {
+        clearTimeout(timeoutId);
+        timerWorker.removeEventListener('message', pingHandler);
+      }
+    };
+
+    timerWorker.addEventListener('message', pingHandler);
+  }
+
+  // Setup regular worker pings to ensure it's running
+  // This helps restart the worker if it gets suspended by the browser
+  function setupWorkerPings() {
+    if (workerPingInterval) {
+      clearInterval(workerPingInterval);
+    }
+
+    // Ping every 30 seconds to keep worker alive and verify it's running
+    workerPingInterval = setInterval(() => {
+      verifyWorkerIsActive();
+    }, 30000);
+  }
+
+  timerWorker.onmessage = function (e) {
+    if (e.data.command === 'ready') {
+      // Worker is ready, setup ping interval
+      isWorkerActive = true;
+      setupWorkerPings();
+
+      // Tell worker about current visibility state on startup
+      timerWorker.postMessage({
+        command: 'visibility',
+        isHidden: document.hidden
+      });
+    } else if (e.data.command === 'pong') {
+      // Worker responded to ping, it's alive
+      isWorkerActive = true;
     } else if (e.data.id) {
       const timer = findTimerById(e.data.id);
       if (timer) {
         timer.remainingSeconds = e.data.remainingSeconds;
-        
+
         // Update UI
         const timerElement = document.querySelector(`[data-timer-id="${timer.id}"]`);
         if (timerElement) {
@@ -88,20 +205,20 @@ function setupTimerWorker() {
             displayElement.textContent = formatTime(timer.remainingSeconds);
           }
           updateProgressIndicator(timerElement, timer);
-          
+
           // Handle timer completion
           if (e.data.completed) {
             timer.isRunning = false;
             timerElement.style.setProperty('--progress-width', '100%');
             timerElement.classList.remove('running');
-            
+
             const startButton = timerElement.querySelector('.btn-start');
             const pauseButton = timerElement.querySelector('.btn-pause');
             if (startButton && pauseButton) {
               startButton.style.display = 'block';
               pauseButton.style.display = 'none';
             }
-            
+
             // Play sound in background without waiting
             playSound(timer.sound);
 
@@ -425,7 +542,7 @@ document.getElementById('timerList').addEventListener('dragover', (e) => {
     // Update timers array to match new DOM order
     const timerElements = document.querySelectorAll('.timer-item');
     timers = Array.from(timerElements).map(el =>
-    timers.find(t => t.id === el.dataset.timerId)
+      timers.find(t => t.id === el.dataset.timerId)
     );
     saveTimers();
   }
